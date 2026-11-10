@@ -51,11 +51,18 @@ Los secretos están cifrados; nadie (ni yo) puede leerlos, solo los usa el workf
 - Si el repo es privado, cada ejecución consume minutos de Actions de tu cuota.
 
 ## Instalar el mod para probar (en tu PC)
-1. Instala **SML 3.12** (o superior compatible) con el Satisfactory Mod Manager (SMM).
-2. Descomprime el zip del artifact (contiene otro zip `RoadLogistics-Windows.zip` o similar; descomprímelo también)
-   en `<carpeta del juego>\FactoryGame\Mods\RoadLogistics\` de forma que exista
-   `...\Mods\RoadLogistics\RoadLogistics.uplugin`.
-3. Arranca el juego. En el log (`%LOCALAPPDATA%\FactoryGame\Saved\Logs\FactoryGame.log`) debe aparecer
+1. Instala **SML 3.12** con el Satisfactory Mod Manager (SMM) y arranca el juego una vez con SML para comprobar que va.
+2. En la ejecución verde de *Actions* → *Artifacts* → descarga **RoadLogistics** (un zip que contiene dos zips).
+3. Abre **`RoadLogistics-Windows.zip`** y extrae su contenido en
+   `<carpeta del juego>\FactoryGame\Mods\RoadLogistics\`. Debe quedar así:
+   ```
+   FactoryGame\Mods\RoadLogistics\RoadLogistics.uplugin
+   FactoryGame\Mods\RoadLogistics\Binaries\Win64\FactoryGameSteam-RoadLogistics-Win64-Shipping.dll   (y la de EGS)
+   FactoryGame\Mods\RoadLogistics\Content\Paks\Windows\RoadLogisticsFactoryGame-Windows.pak         (+ .ucas, .utoc)
+   ```
+   (El otro zip, `RoadLogistics.zip`, es el formato multiplataforma para publicar en ficsit.app; no lo necesitas.)
+4. Arranca el juego (si lo lanzas desde SMM, no desactives SML). En el log
+   (`%LOCALAPPDATA%\FactoryGame\Saved\Logs\FactoryGame.log`) debe aparecer
    `LogRoadLogistics: RoadLogistics module started`.
 
 Limitación actual: solo se empaqueta el cliente Win64 (sirve para un jugador y para partidas multijugador
