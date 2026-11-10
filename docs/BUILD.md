@@ -12,7 +12,13 @@ El motor está en el repo privado `satisfactorymodding/UnrealEngine`. Para tener
 1. Vincula tu cuenta de GitHub a tu cuenta de Epic Games: <https://www.unrealengine.com/en-US/ue-on-github>
    (Perfil de Epic → *Apps and Accounts* → GitHub → *Link*).
 2. Acepta la invitación a la organización **EpicGames** que llega por email (o en <https://github.com/EpicGames>).
-3. Comprueba que puedes abrir <https://github.com/satisfactorymodding/UnrealEngine/releases> con tu cuenta.
+3. Comprueba que ves <https://github.com/EpicGames/UnrealEngine> (repo privado de Epic).
+4. **Paso imprescindible y separado:** vincula tu cuenta con el repo del motor de Satisfactory usando la herramienta
+   oficial de la comunidad: <https://linker.ficsit.app/link> (código fuente: `satisfactorymodding/unreal-linker`).
+   Estar en la organización EpicGames **no basta**: sin este paso `satisfactorymodding/UnrealEngine` da 404.
+   Al terminar te redirige al repo del motor. Después puedes revocar el permiso de la app en
+   <https://github.com/settings/connections/applications/bdde02a7b3318bf2b84d> (el acceso se mantiene).
+5. Comprueba que puedes abrir <https://github.com/satisfactorymodding/UnrealEngine/releases> con tu cuenta.
 
 ### 2. Token de GitHub (`UE_TOKEN`)
 1. <https://github.com/settings/tokens> → *Generate new token* → **Generate new token (classic)**.
