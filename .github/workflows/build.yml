@@ -44,6 +44,11 @@ jobs:
             echo "::error title=Missing secrets::Add UE_TOKEN, WWISE_EMAIL and WWISE_PASSWORD repository secrets (see docs/BUILD.md)"
             exit 1
           fi
+          # Fail fast if the token cannot see the engine releases (instead of after the long Wine build)
+          if ! GH_TOKEN="$UE_TOKEN" gh release list --repo satisfactorymodding/UnrealEngine --limit 1 >/dev/null; then
+            echo "::error title=UE_TOKEN has no access::The token cannot read satisfactorymodding/UnrealEngine releases. Check the Epic<->GitHub link and the 'repo' scope (docs/BUILD.md)"
+            exit 1
+          fi
 
       - name: Free disk space
         run: |
