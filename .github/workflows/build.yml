@@ -1,0 +1,189 @@
+# Builds RoadLogistics against the SML Starter Project on a GitHub-hosted Linux runner.
+# Adapted from SML's own CI (satisfactorymodding/SatisfactoryModLoader/.github/workflows/build.yml):
+# Linux CSS editor + MSVC under Wine to cross-compile the Win64 game module.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions), see docs/BUILD.md:
+#   UE_TOKEN        GitHub token of an account with access to satisfactorymodding/UnrealEngine releases
+#   WWISE_EMAIL     Audiokinetic account email
+#   WWISE_PASSWORD  Audiokinetic account password
+name: Build
+
+on:
+  push:
+    branches: [ main, 'claude/**' ]
+    paths-ignore: [ 'docs/**', '**.md' ]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package the mod (cook + Win64 build) after compiling'
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SML_REPO: https://github.com/satisfactorymodding/SatisfactoryModLoader.git
+  # Pinned to the commit whose headers were researched in docs/RESEARCH.md (headers CL517554)
+  SML_REF: a7e855031811d39bbdd12fc2563b87ea2d80cb5f
+  WINE_VERSION: "11.0"
+  WORK: /mnt/work
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check secrets
+        env:
+          UE_TOKEN: ${{ secrets.UE_TOKEN }}
+          WWISE_EMAIL: ${{ secrets.WWISE_EMAIL }}
+        run: |
+          if [ -z "$UE_TOKEN" ] || [ -z "$WWISE_EMAIL" ]; then
+            echo "::error title=Missing secrets::Add UE_TOKEN, WWISE_EMAIL and WWISE_PASSWORD repository secrets (see docs/BUILD.md)"
+            exit 1
+          fi
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/.ghcup || true
+          sudo docker image prune --all --force || true
+          sudo mkdir -p $WORK && sudo chown $USER:$USER $WORK
+          df -h / /mnt
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget build-essential zstd msitools perl gcc-multilib gcc-mingw-w64 \
+            libasound2-dev libpulse-dev libdbus-1-dev libfontconfig-dev libfreetype-dev libgnutls28-dev libgl-dev \
+            libunwind-dev libx11-dev libxcomposite-dev libxcursor-dev libxfixes-dev libxi-dev libxrandr-dev \
+            libxrender-dev libxext-dev libwayland-bin libwayland-dev libegl-dev libxkbcommon-dev libxkbregistry-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libosmesa6-dev libsdl2-dev libudev-dev libvulkan-dev flex bison
+
+      # ---------- Wine (built from source like SML CI, cached) ----------
+      - name: Cache Wine
+        id: cache-wine
+        uses: actions/cache@v4
+        with:
+          path: /opt/wine
+          key: wine-${{ env.WINE_VERSION }}-mr9640-v1
+
+      - name: Build Wine
+        if: steps.cache-wine.outputs.cache-hit != 'true'
+        run: |
+          sudo mkdir -p /opt/wine && sudo chown $USER:$USER /opt/wine
+          git clone --depth 1 -b wine-$WINE_VERSION https://gitlab.winehq.org/wine/wine.git $WORK/wine-src
+          cd $WORK/wine-src
+          wget -O $RUNNER_TEMP/wine_typelib.patch https://gitlab.winehq.org/wine/wine/-/merge_requests/9640.patch
+          git -c user.email=ci@example.com -c user.name=CI am $RUNNER_TEMP/wine_typelib.patch
+          mkdir build && cd build
+          ../configure --prefix=/opt/wine --enable-archs=x86_64,i386 --without-tests
+          make -j$(nproc)
+          make install
+          rm -rf $WORK/wine-src
+
+      - name: Setup Wine
+        run: |
+          echo "/opt/wine/bin" >> $GITHUB_PATH
+          export PATH=/opt/wine/bin:$PATH
+          export WINEPREFIX="$RUNNER_TEMP/.wine"
+          echo "WINEPREFIX=$WINEPREFIX" >> $GITHUB_ENV
+          echo "WINEDEBUG=-all" >> $GITHUB_ENV
+          mkdir -p $WINEPREFIX
+          WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -u
+          wineserver -w
+
+      # ---------- MSVC under Wine (cached) ----------
+      - name: Cache MSVC
+        id: cache-msvc
+        uses: actions/cache@v4
+        with:
+          path: /opt/msvc
+          key: msvc-17.8-sdk22621-v1
+
+      - name: Setup MSVC
+        run: |
+          git clone -b ue-patches https://github.com/mircearoata/msvc-wine.git $RUNNER_TEMP/msvc-wine
+          MSVC_DIR=/opt/msvc
+          if [ ! -f $MSVC_DIR/.installed ]; then
+            sudo mkdir -p $MSVC_DIR && sudo chown $USER:$USER $MSVC_DIR
+            wget -P $WORK/msvc-download https://github.com/kbandla/installers/releases/latest/download/X64.Debuggers.And.Tools-x64_en-us.msi
+            $RUNNER_TEMP/msvc-wine/vsdownload.py --dest $MSVC_DIR --cache $WORK/msvc-download \
+              --accept-license --channel release.ltsc.17.8 --msvc-version 17.8 --sdk-version 10.0.22621 \
+              Microsoft.Net.4.8.SDK Microsoft.VisualStudio.MinShell
+            msiextract -C $MSVC_DIR $WORK/msvc-download/X64.Debuggers.And.Tools-x64_en-us.msi > /dev/null
+            $RUNNER_TEMP/msvc-wine/install.sh $MSVC_DIR
+            cat > $MSVC_DIR/bin/x64/pdbcopy << 'EOF'
+          #!/usr/bin/env bash
+          . "$(dirname "$0")"/msvcenv.sh
+          SDKDEBUGBINDIR="$SDKBASE/Debuggers/x64"
+          "$(dirname "$0")"/wine-msvc.sh "$SDKDEBUGBINDIR/pdbcopy.exe" "$@"
+          EOF
+            ln -sf ./pdbcopy $MSVC_DIR/bin/x64/pdbcopy.exe
+            chmod +x $MSVC_DIR/bin/x64/pdbcopy*
+            touch $MSVC_DIR/.installed
+            rm -rf $WORK/msvc-download
+          fi
+          echo "UE_WINE_MSVC=$MSVC_DIR" >> $GITHUB_ENV
+
+      # ---------- Starter project + this mod ----------
+      - name: Checkout RoadLogistics
+        uses: actions/checkout@v4
+        with:
+          path: RoadLogistics
+
+      - name: Checkout SML starter project
+        run: |
+          git init $WORK/SML
+          cd $WORK/SML
+          git remote add origin $SML_REPO
+          git fetch --depth 1 origin $SML_REF
+          git checkout FETCH_HEAD
+          mkdir -p Mods/RoadLogistics
+          rsync -a --exclude .git --exclude .github --exclude docs "$GITHUB_WORKSPACE/RoadLogistics/" Mods/RoadLogistics/
+
+      - name: Download Unreal Engine (CSS, Linux editor)
+        working-directory: ${{ env.WORK }}
+        env:
+          GH_TOKEN: ${{ secrets.UE_TOKEN }}
+        run: |
+          mkdir -p ue && cd ue
+          gh release download --repo satisfactorymodding/UnrealEngine -p "UnrealEngine-CSS-Editor-Linux.tar.zst.*"
+          cat UnrealEngine-CSS-Editor-Linux.tar.zst.* | zstd -d | tar -xf -
+          rm UnrealEngine-CSS-Editor-Linux.tar.zst.*
+          ./Engine/Binaries/Linux/UnrealVersionSelector -register || true
+          df -h /mnt
+
+      - name: Download and integrate Wwise
+        working-directory: ${{ env.WORK }}
+        env:
+          GH_TOKEN: ${{ secrets.UE_TOKEN }}
+          WWISE_EMAIL: ${{ secrets.WWISE_EMAIL }}
+          WWISE_PASSWORD: ${{ secrets.WWISE_PASSWORD }}
+        run: |
+          gh release download --repo mircearoata/wwise-cli -p wwise-cli_linux_amd64 -O wwise-cli
+          chmod +x ./wwise-cli
+          ./wwise-cli download --sdk-version "2025.1.6.9117" --filter Packages=SDK --filter DeploymentPlatforms=Windows_vc160 --filter DeploymentPlatforms=Windows_vc170 --filter DeploymentPlatforms=Linux --filter DeploymentPlatforms= >/dev/null
+          ./wwise-cli integrate-ue --integration-version "2025.1.6.4248" --project "$WORK/SML/FactoryGame.uproject" >/dev/null
+
+      # ---------- Compile (this is the "does it compile" gate) ----------
+      - name: Build FactoryEditor (Linux, Development)
+        run: $WORK/ue/Engine/Build/BatchFiles/Linux/Build.sh FactoryEditor Linux Development -project="$WORK/SML/FactoryGame.uproject"
+
+      # ---------- Package (cook + Win64 game module) ----------
+      - name: Package RoadLogistics
+        if: ${{ github.event_name == 'push' || inputs.package }}
+        run: |
+          ulimit -n 1048576
+          $WORK/ue/Engine/Build/BatchFiles/RunUAT.sh -ScriptsForProject="$WORK/SML/FactoryGame.uproject" PackagePlugin \
+            -Project="$WORK/SML/FactoryGame.uproject" -dlcname=RoadLogistics -merge -build \
+            -clientconfig=Shipping -platform=Win64 -nocompileeditor -installed
+
+      - name: Upload mod zip
+        if: ${{ github.event_name == 'push' || inputs.package }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoadLogistics
+          path: ${{ env.WORK }}/SML/Saved/ArchivedPlugins/RoadLogistics/*.zip
+          if-no-files-found: error
