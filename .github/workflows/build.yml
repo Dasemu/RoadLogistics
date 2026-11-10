@@ -210,7 +210,9 @@ jobs:
       - name: Package RoadLogistics
         if: ${{ github.event_name == 'push' || inputs.package }}
         run: |
-          ulimit -n 1048576
+          # SML CI uses 1048576, which hosted runners do not allow; raise the soft limit to the hard limit instead
+          ulimit -n "$(ulimit -Hn)" || true
+          echo "open files limit: $(ulimit -n)"
           $WORK/ue/Engine/Build/BatchFiles/RunUAT.sh -ScriptsForProject="$WORK/SML/FactoryGame.uproject" PackagePlugin \
             -Project="$WORK/SML/FactoryGame.uproject" -dlcname=RoadLogistics -merge -build \
             -clientconfig=Shipping -platform=Win64 -nocompileeditor -installed
