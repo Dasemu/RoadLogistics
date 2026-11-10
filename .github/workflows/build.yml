@@ -29,6 +29,8 @@ env:
   SML_REF: a7e855031811d39bbdd12fc2563b87ea2d80cb5f
   WINE_VERSION: "11.0"
   WORK: /mnt/work
+  # Leave empty to auto-pick the newest release whose tag contains 5.6.1
+  UE_RELEASE_TAG: ""
 
 jobs:
   build:
@@ -44,11 +46,15 @@ jobs:
             echo "::error title=Missing secrets::Add UE_TOKEN, WWISE_EMAIL and WWISE_PASSWORD repository secrets (see docs/BUILD.md)"
             exit 1
           fi
-          # Fail fast if the token cannot see the engine releases (instead of after the long Wine build)
-          if ! GH_TOKEN="$UE_TOKEN" gh release list --repo satisfactorymodding/UnrealEngine --limit 1 >/dev/null; then
-            echo "::error title=UE_TOKEN has no access::The token cannot read satisfactorymodding/UnrealEngine releases. Check the Epic<->GitHub link and the 'repo' scope (docs/BUILD.md)"
+          # Fail fast if the token cannot see the engine repo (instead of after the long Wine build)
+          export GH_TOKEN="$UE_TOKEN"
+          echo "Token user: $(gh api user --jq .login || echo '?')"
+          if ! gh api repos/satisfactorymodding/UnrealEngine --jq .full_name; then
+            echo "::error title=UE_TOKEN has no access::The token cannot see satisfactorymodding/UnrealEngine. Check the Epic<->GitHub link, the EpicGames org invite and the classic 'repo' scope (docs/BUILD.md)"
             exit 1
           fi
+          echo "Available engine releases:"
+          gh release list --repo satisfactorymodding/UnrealEngine --limit 15 || true
 
       - name: Free disk space
         run: |
@@ -67,9 +73,9 @@ jobs:
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libosmesa6-dev libsdl2-dev libudev-dev libvulkan-dev flex bison
 
       # ---------- Wine (built from source like SML CI, cached) ----------
-      - name: Cache Wine
+      - name: Restore Wine cache
         id: cache-wine
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: /opt/wine
           key: wine-${{ env.WINE_VERSION }}-mr9640-v1
@@ -88,6 +94,13 @@ jobs:
           make install
           rm -rf $WORK/wine-src
 
+      - name: Save Wine cache
+        if: steps.cache-wine.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/wine
+          key: ${{ steps.cache-wine.outputs.cache-primary-key }}
+
       - name: Setup Wine
         run: |
           echo "/opt/wine/bin" >> $GITHUB_PATH
@@ -100,9 +113,9 @@ jobs:
           wineserver -w
 
       # ---------- MSVC under Wine (cached) ----------
-      - name: Cache MSVC
+      - name: Restore MSVC cache
         id: cache-msvc
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: /opt/msvc
           key: msvc-17.8-sdk22621-v1
@@ -132,9 +145,16 @@ jobs:
           fi
           echo "UE_WINE_MSVC=$MSVC_DIR" >> $GITHUB_ENV
 
+      - name: Save MSVC cache
+        if: steps.cache-msvc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/msvc
+          key: ${{ steps.cache-msvc.outputs.cache-primary-key }}
+
       # ---------- Starter project + this mod ----------
       - name: Checkout RoadLogistics
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: RoadLogistics
 
@@ -154,7 +174,17 @@ jobs:
           GH_TOKEN: ${{ secrets.UE_TOKEN }}
         run: |
           mkdir -p ue && cd ue
-          gh release download --repo satisfactorymodding/UnrealEngine -p "UnrealEngine-CSS-Editor-Linux.tar.zst.*"
+          TAG="${UE_RELEASE_TAG:-}"
+          if [ -z "$TAG" ]; then
+            # Newest release whose tag mentions the engine version required by FactoryGame.uproject
+            TAG=$(gh release list --repo satisfactorymodding/UnrealEngine --limit 50 --json tagName,publishedAt \
+                  --jq 'sort_by(.publishedAt) | reverse | map(select(.tagName | contains("5.6.1"))) | .[0].tagName')
+          fi
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::No 5.6.1 engine release found; set UE_RELEASE_TAG in the workflow env"; exit 1
+          fi
+          echo "Using engine release $TAG"
+          gh release download "$TAG" --repo satisfactorymodding/UnrealEngine -p "UnrealEngine-CSS-Editor-Linux.tar.zst.*"
           cat UnrealEngine-CSS-Editor-Linux.tar.zst.* | zstd -d | tar -xf -
           rm UnrealEngine-CSS-Editor-Linux.tar.zst.*
           ./Engine/Binaries/Linux/UnrealVersionSelector -register || true
