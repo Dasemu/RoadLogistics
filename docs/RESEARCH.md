@@ -311,3 +311,8 @@ Un **híbrido** también es posible: camión real si el spawn funciona, abstract
 3. **Estación**: ¿subclase propia de `AFGBuildableDockingStation` (más control; edificio nuevo) o reutilizar las estaciones
    vanilla vía hooks (tus estaciones existentes se vuelven logísticas)? Recomiendo **subclase propia** reutilizando la
    malla vanilla.
+
+## 11. Decisiones tomadas (tras la Fase 0)
+1. Compilación en **GitHub Actions** con secretos del repo (`docs/BUILD.md`).
+2. El repo contiene **solo el plugin** (`Mods/RoadLogistics/`).
+3. Estación logística = **subclase propia** de `AFGBuildableDockingStation` con la malla vanilla.
