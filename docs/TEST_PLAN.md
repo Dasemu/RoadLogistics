@@ -21,15 +21,15 @@
 | 7 | `/rl status <camión>` | Muestra el estado y los waypoints `wp[0]`, `wp[1]` con los nombres de las estaciones. |
 | 8 | `/rl goto <camión> 0` (una sola estación) | Anota qué `status=` aparece (esperamos `TooFewStations`; es un dato para el diseño, no un fallo). |
 | 9 | `/rl stop <camión>` | `autopilot=off`; el camión se detiene. |
-| 10 | `/rl spawn 0 20` | Aparece un camión nuevo **sobre el path que sale de la estación 0**, a unos 8 m. El chat dice `Spawned: ... onPath=yes fuel=20`. |
-| 11 | `/rl trucks` y luego `/rl goto <nuevo> 1 0` | El camión spawneado conduce solo a la estación 1 y vuelve a la 0. |
-| 12 | `/rl despawn <nuevo>` | El camión desaparece. `/rl trucks` ya no lo lista. El resto de camiones sigue funcionando (no se quedan bloqueados en un cruce que usaba el borrado). |
+| 10 | *(Opcional: el diseño final ya no spawnea camiones)* `/rl spawn 0 20` | Aparece un camión nuevo **sobre el path que sale de la estación 0**, a unos 8 m. El chat dice `Spawned: ... onPath=yes fuel=20`. |
+| 11 | *(Opcional)* `/rl trucks` y luego `/rl goto <nuevo> 1 0` | El camión spawneado conduce solo a la estación 1 y vuelve a la 0. |
+| 12 | *(Opcional)* `/rl despawn <nuevo>` | El camión desaparece. `/rl trucks` ya no lo lista. El resto de camiones sigue funcionando (no se quedan bloqueados en un cruce que usaba el borrado). |
 | 13 | Con un camión en ruta: guardar, salir al menú, cargar | El camión sigue su ruta tras cargar (estado vanilla). La vigilancia `[RL]` se pierde tras cargar; es normal en esta fase. |
 | 14 | (Opcional) Multijugador: un amigo se une como cliente | El cliente ve moverse los camiones de las pruebas 6 y 11. Los comandos `/rl` funcionan para el anfitrión. |
 
 ### Qué enviarme
 - Para cada prueba: ✅ / ❌ y lo que viste.
-- En especial: el `status=` de las pruebas 6, 8 y 11, si `onPath` fue `yes` en la 10, y cualquier error.
+- En especial: qué pasa exactamente al atracar en la prueba 6 (¿cuánto rato se queda atracado?), el `status=` de las pruebas 6 y 8, si `onPath` fue `yes` en la 10, y cualquier error.
 - Las líneas del log con `LogRoadLogistics` (`%LOCALAPPDATA%\FactoryGame\Saved\Logs\FactoryGame.log`).
 
 ### Si algo falla
